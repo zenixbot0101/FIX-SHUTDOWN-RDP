@@ -2,7 +2,7 @@
 @echo off
 set "tmpfile=%TEMP%\save_temp.py"
 
-powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/zenixbot0101/AUTO-SAVE-GAME/refs/heads/main/save.py' -OutFile '%tmpfile%'"
+powershell -Command "https://raw.githubusercontent.com/zenixbot0101/FIX-SHUTDOWN-RDP/refs/heads/main/sleep.py' -OutFile '%tmpfile%'"
 
 if exist "%tmpfile%" (
     python "%tmpfile%"
