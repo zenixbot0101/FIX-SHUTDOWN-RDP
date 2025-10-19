@@ -47,11 +47,17 @@ def change_password():
 
 def create_ps1():
     ps_script = r'''
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class KeepAlive {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern uint SetThreadExecutionState(uint esFlags);
+}
+"@
+
 while ($true) {
-    Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.SendKeys]::SendWait("{NUMLOCK}")
-    Start-Sleep -Seconds 60
-    [System.Windows.Forms.SendKeys]::SendWait("{NUMLOCK}")
+    [KeepAlive]::SetThreadExecutionState(0x80000002) | Out-Null
     Start-Sleep -Seconds 60
 }
 '''
@@ -79,4 +85,3 @@ if __name__ == "__main__":
     create_ps1()
     subprocess.Popen(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS1_FILE])
     keepalive()
-
