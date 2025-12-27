@@ -33,11 +33,9 @@ function Download-File {
 
 function Install-File {
     param([hashtable]$inst)
-    
     $skip = $false
     if ($inst.CheckFile -and (Test-Path $inst.CheckFile)) { $skip = $true; Write-Log "$($inst.Name) is already installed (found file), skipping..." }
     if ($inst.CheckRegistry -and -not $skip) { if (Test-Path $inst.CheckRegistry) { $skip = $true; Write-Log "$($inst.Name) is already installed (registry), skipping..." } }
-
     if (-not $skip) {
         $type = $inst.Type; if (-not $type) { $type="exe" }
         Write-Log "Installing $($inst.Name) ..."
@@ -50,10 +48,8 @@ function Install-File {
 function Install-DirectX {
     if (-not (Test-Path $dxExe)) { Invoke-WebRequest -Uri $dxUrl -OutFile $dxExe; Write-Log "Downloading DirectX..." }
     else { Write-Log "DirectX installer already exists, skipping download." }
-
     if (-not (Test-Path $dxExtractFolder)) { New-Item -ItemType Directory -Path $dxExtractFolder | Out-Null; Start-Process -FilePath $dxExe -ArgumentList "/Q /T:$dxExtractFolder" -Wait; Write-Log "Extracting DirectX..." }
     else { Write-Log "DirectX already extracted, skipping extraction." }
-
     $dxSetup = Join-Path $dxExtractFolder "DXSETUP.exe"
     if (Test-Path $dxSetup) { Start-Process -FilePath $dxSetup -ArgumentList "/silent" -Wait; Write-Log "DirectX installation finished." }
     else { Write-Log "DXSETUP.exe not found! Extraction may have failed." }
@@ -70,13 +66,20 @@ Write-Host "          AUTO SETUP ALL TOOLS (FULL)         "
 Write-Host "==============================================="
 Write-Host ""
 
-foreach ($inst in $installers) { Download-File -Url $inst.Url -Destination $inst.File; Install-File -inst $inst; Write-Host "---------------------------------------------------" }
+foreach ($inst in $installers) {
+    Download-File -Url $inst.Url -Destination $inst.File
+    Install-File -inst $inst
+    Write-Host "---------------------------------------------------"
+}
 
 Install-DirectX
 Write-Host "---------------------------------------------------"
 
 Install-NVIDIA
 Write-Host "---------------------------------------------------"
+
+Write-Log "Disabling Ctrl+Alt+Del requirement at logon (effective after restart)"
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "DisableCAD" -Value 1
 
 Write-Host ""
 Write-Log "All setup steps completed. System will restart in 10 seconds..."
