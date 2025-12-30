@@ -1,3 +1,8 @@
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    exit
+}
+
 $installers = @(
     @{Name="VC Redist x64"; Url="https://download.microsoft.com/download/9/3/f/93fcf1e7-e6a4-478b-96e7-d4b285925b00/vc_redist.x64.exe"; File="vc_redist.x64.exe"; Args="/install /quiet /norestart"; CheckRegistry="HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"},
     @{Name="Steam Client"; Url="https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe"; File="SteamSetup.exe"; Args="/S"; CheckFile="$env:ProgramFiles(x86)\Steam\Steam.exe"},
@@ -23,65 +28,72 @@ function Write-Log {
 
 function Download-File {
     param([string]$Url, [string]$Destination)
-    if (-Not (Test-Path $Destination)) {
-        Write-Log "Downloading $Destination ..."
+    if (-not (Test-Path $Destination)) {
         Invoke-WebRequest -Uri $Url -OutFile $Destination
-    } else {
-        Write-Log "$Destination already exists, skipping download."
     }
 }
 
 function Install-File {
     param([hashtable]$inst)
     $skip = $false
-    if ($inst.CheckFile -and (Test-Path $inst.CheckFile)) { $skip = $true; Write-Log "$($inst.Name) is already installed (found file), skipping..." }
-    if ($inst.CheckRegistry -and -not $skip) { if (Test-Path $inst.CheckRegistry) { $skip = $true; Write-Log "$($inst.Name) is already installed (registry), skipping..." } }
+    if ($inst.CheckFile -and (Test-Path $inst.CheckFile)) { $skip = $true }
+    if ($inst.CheckRegistry -and -not $skip) { if (Test-Path $inst.CheckRegistry) { $skip = $true } }
     if (-not $skip) {
         $type = $inst.Type; if (-not $type) { $type="exe" }
-        Write-Log "Installing $($inst.Name) ..."
-        if ($type -eq "msi") { Start-Process msiexec.exe -ArgumentList "/i `"$($inst.File)`" $($inst.Args)" -Wait -PassThru | Out-Null }
-        else { Start-Process $inst.File -ArgumentList $inst.Args -Wait -PassThru | Out-Null }
-        Write-Log "$($inst.Name) installation finished."
+        if ($type -eq "msi") {
+            Start-Process msiexec.exe -ArgumentList "/i `"$($inst.File)`" $($inst.Args)" -Wait
+        } else {
+            Start-Process $inst.File -ArgumentList $inst.Args -Wait
+        }
     }
 }
 
 function Install-DirectX {
-    if (-not (Test-Path $dxExe)) { Invoke-WebRequest -Uri $dxUrl -OutFile $dxExe; Write-Log "Downloading DirectX..." }
-    else { Write-Log "DirectX installer already exists, skipping download." }
-    if (-not (Test-Path $dxExtractFolder)) { New-Item -ItemType Directory -Path $dxExtractFolder | Out-Null; Start-Process -FilePath $dxExe -ArgumentList "/Q /T:$dxExtractFolder" -Wait; Write-Log "Extracting DirectX..." }
-    else { Write-Log "DirectX already extracted, skipping extraction." }
+    if (-not (Test-Path $dxExe)) { Invoke-WebRequest -Uri $dxUrl -OutFile $dxExe }
+    if (-not (Test-Path $dxExtractFolder)) {
+        New-Item -ItemType Directory -Path $dxExtractFolder | Out-Null
+        Start-Process $dxExe -ArgumentList "/Q /T:$dxExtractFolder" -Wait
+    }
     $dxSetup = Join-Path $dxExtractFolder "DXSETUP.exe"
-    if (Test-Path $dxSetup) { Start-Process -FilePath $dxSetup -ArgumentList "/silent" -Wait; Write-Log "DirectX installation finished." }
-    else { Write-Log "DXSETUP.exe not found! Extraction may have failed." }
+    if (Test-Path $dxSetup) { Start-Process $dxSetup -ArgumentList "/silent" -Wait }
 }
 
 function Install-NVIDIA {
-    if (Test-Path $nvDriver) { Start-Process -FilePath $nvDriver -ArgumentList "-s" -Wait; Write-Log "NVIDIA driver installation finished." }
-    else { Write-Log "NVIDIA driver file not found at $nvDriver, skipping." }
+    if (Test-Path $nvDriver) { Start-Process $nvDriver -ArgumentList "-s" -Wait }
 }
 
-$host.UI.RawUI.ForegroundColor = "Green"
-Write-Host "==============================================="
-Write-Host "          AUTO SETUP ALL TOOLS (FULL)         "
-Write-Host "==============================================="
-Write-Host ""
+function Install-ViGEmBus {
+    $os = (Get-CimInstance Win32_OperatingSystem).Caption
+    if ($os -notlike "*Server*") { return }
+
+    $vigemUrl = "https://github.com/nefarius/ViGEmBus/releases/download/v1.22.0/ViGEmBus_1.22.0_x64_x86_arm64.exe"
+    $baseDir = "$env:USERPROFILE\Downloads\Vigembus"
+    $vigemExe = "$baseDir\ViGEmBus.exe"
+
+    if (!(Test-Path $baseDir)) { New-Item -ItemType Directory -Path $baseDir | Out-Null }
+    if (!(Test-Path $vigemExe)) { Invoke-WebRequest $vigemUrl -OutFile $vigemExe }
+
+    Start-Process $vigemExe -ArgumentList "/extract `"$baseDir`"" -Wait
+
+    $driverDir = Get-ChildItem $baseDir | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+    Set-Location $driverDir.FullName
+
+    .\nefconw.exe --remove-device-node --hardware-id "Nefarius\ViGEmBus\Gen1" --class-guid "4D36E97D-E325-11CE-BFC1-08002BE10318"
+    .\nefconw.exe --remove-device-node --hardware-id "Root\ViGEmBus" --class-guid "4D36E97D-E325-11CE-BFC1-08002BE10318"
+    .\nefconw.exe --create-device-node --hardware-id "Nefarius\ViGEmBus\Gen1" --class-name System --class-guid "4D36E97D-E325-11CE-BFC1-08002BE10318"
+    .\nefconw.exe --install-driver --inf-path "ViGEmBus.inf"
+}
 
 foreach ($inst in $installers) {
     Download-File -Url $inst.Url -Destination $inst.File
     Install-File -inst $inst
-    Write-Host "---------------------------------------------------"
 }
 
 Install-DirectX
-Write-Host "---------------------------------------------------"
-
 Install-NVIDIA
-Write-Host "---------------------------------------------------"
+Install-ViGEmBus
 
-Write-Log "Disabling Ctrl+Alt+Del requirement at logon (effective after restart)"
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "DisableCAD" -Value 1
 
-Write-Host ""
-Write-Log "All setup steps completed. System will restart in 10 seconds..."
-Start-Sleep -Seconds 10
-shutdown.exe /r /t 0 /c "Restarting after auto setup"
+Start-Sleep 10
+shutdown.exe /r /t 0
