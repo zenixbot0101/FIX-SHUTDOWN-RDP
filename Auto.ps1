@@ -1,3 +1,5 @@
+# WHAT DO YOU DO IN THERE ?
+
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     exit
@@ -29,17 +31,21 @@ function Write-Log {
 function Download-File {
     param([string]$Url, [string]$Destination)
     if (-not (Test-Path $Destination)) {
+        Write-Log "Downloading $Destination"
         Invoke-WebRequest -Uri $Url -OutFile $Destination
+    } else {
+        Write-Log "$Destination exists, skip"
     }
 }
 
 function Install-File {
     param([hashtable]$inst)
     $skip = $false
-    if ($inst.CheckFile -and (Test-Path $inst.CheckFile)) { $skip = $true }
-    if ($inst.CheckRegistry -and -not $skip) { if (Test-Path $inst.CheckRegistry) { $skip = $true } }
+    if ($inst.CheckFile -and (Test-Path $inst.CheckFile)) { $skip = $true; Write-Log "$($inst.Name) installed, skip" }
+    if ($inst.CheckRegistry -and -not $skip) { if (Test-Path $inst.CheckRegistry) { $skip = $true; Write-Log "$($inst.Name) installed, skip" } }
     if (-not $skip) {
         $type = $inst.Type; if (-not $type) { $type="exe" }
+        Write-Log "Installing $($inst.Name)"
         if ($type -eq "msi") {
             Start-Process msiexec.exe -ArgumentList "/i `"$($inst.File)`" $($inst.Args)" -Wait
         } else {
@@ -83,6 +89,9 @@ function Install-ViGEmBus {
     .\nefconw.exe --create-device-node --hardware-id "Nefarius\ViGEmBus\Gen1" --class-name System --class-guid "4D36E97D-E325-11CE-BFC1-08002BE10318"
     .\nefconw.exe --install-driver --inf-path "ViGEmBus.inf"
 }
+
+$host.UI.RawUI.ForegroundColor = "Green"
+Write-Host "AUTO SETUP START"
 
 foreach ($inst in $installers) {
     Download-File -Url $inst.Url -Destination $inst.File
